@@ -10,6 +10,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/Snapdeck "$APP/Contents/MacOS/Snapdeck"
 cp Support/Info.plist "$APP/Contents/Info.plist"
+# Releases pass the version of their tag.
+if [ -n "${VERSION:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+fi
 # Ad-hoc signing by default. Set CODESIGN_IDENTITY to a certificate from
 # `security find-identity -v -p codesigning` so that macOS keeps the
 # Accessibility permission across rebuilds.

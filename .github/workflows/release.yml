@@ -1,0 +1,54 @@
+# Pushing a tag such as v0.2.0 builds Snapdeck.app, publishes it as a GitHub
+# release and updates the Homebrew cask in this repository.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must look like v1.2.3, got: $TAG" >&2
+            exit 1
+          fi
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test
+
+      - name: Build the app
+        run: ./scripts/bundle.sh
+
+      - name: Package
+        run: |
+          ditto -c -k --keepParent build/Snapdeck.app "Snapdeck-$VERSION.zip"
+          echo "SHA256=$(shasum -a 256 "Snapdeck-$VERSION.zip" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Publish the release
+        run: gh release create "$TAG" "Snapdeck-$VERSION.zip" --title "Snapdeck $VERSION" --generate-notes
+
+      - name: Update the Homebrew cask
+        run: |
+          git fetch origin main
+          git checkout main
+          sed -i '' -E "s/^  version \".*\"/  version \"$VERSION\"/" Casks/snapdeck.rb
+          sed -i '' -E "s/^  sha256 .*/  sha256 \"$SHA256\"/" Casks/snapdeck.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Update cask to $VERSION"
+          git push origin main
