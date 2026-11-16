@@ -29,6 +29,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerHotkeys()
         dragSnap.start()
 
+        // Snap groups: when the user switches to another app, bring the rest of the
+        // arrangement forward with the window that now has focus.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self?.windowManager.raiseGroupOfFocusedWindow()
+            }
+        }
+
         if CommandLine.arguments.contains("--settings") { showSettings() }
         windowManager.confirmLaunch = { names in
             let alert = NSAlert()
