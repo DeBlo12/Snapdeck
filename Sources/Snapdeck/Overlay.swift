@@ -4,6 +4,8 @@ import AppKit
 struct OverlaySpec: Equatable {
     var rect: CGRect
     var label: String = ""
+    /// Dimmed rectangles show the alternatives next to the one that is targeted.
+    var dimmed: Bool = false
 }
 
 /// Shows translucent previews of where windows will land.
@@ -20,7 +22,11 @@ final class OverlayController {
             window.setFrame(Accessibility.flip(spec.rect).insetBy(dx: 5, dy: 5), display: true)
             if let label = window.contentView?.subviews.first as? NSTextField {
                 label.stringValue = spec.label
+                label.alphaValue = spec.dimmed ? 0.6 : 1
             }
+            let accent = NSColor.controlAccentColor
+            window.contentView?.layer?.borderColor = accent.withAlphaComponent(spec.dimmed ? 0.45 : 0.9).cgColor
+            window.contentView?.layer?.backgroundColor = accent.withAlphaComponent(spec.dimmed ? 0.07 : 0.28).cgColor
             window.orderFrontRegardless()
         }
         windows.dropFirst(specs.count).forEach { $0.orderOut(nil) }

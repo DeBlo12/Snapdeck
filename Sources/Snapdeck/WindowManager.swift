@@ -12,7 +12,8 @@ final class WindowManager {
     /// The zone each window was last put into and the frame it actually took.
     /// Windows with a minimum or fixed size do not fill their zone, so the zone
     /// cannot always be worked out from the frame alone.
-    private var placed: [AXUIElement: (zone: Zone, screen: ScreenInfo, frame: CGRect)] = [:]
+    private var placed: [AXUIElement: (zone: Zone, screen: ScreenInfo, frame: CGRect, order: Int)] = [:]
+    private var placementCounter = 0
 
     /// Set to trace snap decisions (debug builds only, see `--trace` in AppDelegate).
     var trace: ((String) -> Void)?
@@ -75,8 +76,44 @@ final class WindowManager {
             restoreFrames[window] = frame
         }
         window.setFrame(frame(of: zone, on: screen))
+        record(window, zone: zone, screen: screen)
+    }
+
+    /// Notes where a window was put, for zone stepping and snap groups.
+    private func record(_ window: AXUIElement, zone: Zone, screen: ScreenInfo) {
         if placed.count > 200 { placed.removeAll() }
-        placed[window] = window.frame.map { (zone, screen, $0) }
+        placementCounter += 1
+        placed[window] = window.frame.map { (zone, screen, $0, placementCounter) }
+    }
+
+    /// True while a window still sits where Snapdeck put it.
+    private func isStillPlaced(_ window: AXUIElement) -> Bool {
+        guard let last = placed[window], let frame = window.frame else { return false }
+        return abs(last.frame.minX - frame.minX) < 3 && abs(last.frame.minY - frame.minY) < 3
+            && abs(last.frame.width - frame.width) < 3 && abs(last.frame.height - frame.height) < 3
+    }
+
+    // MARK: Snap groups
+
+    /// Windows that Snapdeck arranged on one screen behave as a group: when one of
+    /// them comes to the front, the others are brought forward behind it, so that
+    /// switching to an app does not leave part of the arrangement covered.
+    func raiseGroupOfFocusedWindow() {
+        guard settings.snapGroupsEnabled, let focused = Accessibility.focusedWindow(),
+              let own = placed[focused], isStillPlaced(focused) else { return }
+
+        // Forget windows that have been closed.
+        for window in Array(placed.keys) where window.frame == nil { placed[window] = nil }
+
+        let others = placed
+            .filter { $0.key != focused && $0.value.screen == own.screen }
+            .filter { isStillPlaced($0.key) && !$0.key.isMinimized }
+            .sorted { $0.value.order < $1.value.order }
+            .map(\.key)
+        guard !others.isEmpty else { return }
+
+        for window in others { AXUIElementPerformAction(window, kAXRaiseAction as CFString) }
+        AXUIElementPerformAction(focused, kAXRaiseAction as CFString)
     }
 
     /// The zone a window is in: the one we put it into if it has not moved since,
@@ -299,6 +336,7 @@ final class WindowManager {
                 guard let liveIndex else { continue }
                 let screen = screens[max(0, min(entry.screen, screens.count - 1))]
                 live[liveIndex].setFrame(entry.zone.frame(in: screen.visible))
+                record(live[liveIndex], zone: entry.zone, screen: screen)
             }
         }
 

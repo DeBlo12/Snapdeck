@@ -42,6 +42,14 @@ public func nextZone(direction: Direction, current: Zone) -> SnapResult {
     }
 }
 
+/// The zone under `point` when zones are laid out in `area`. Where zones overlap,
+/// the smallest one wins so that it stays reachable.
+public func zoneIndex(at point: CGPoint, zones: [Zone], in area: CGRect) -> Int? {
+    zones.indices
+        .filter { zones[$0].frame(in: area).contains(point) }
+        .min { zones[$0].width * zones[$0].height < zones[$1].width * zones[$1].height }
+}
+
 /// Drag-to-edge snapping: the zone to offer while the cursor is at `point`
 /// on a screen with frame `screen` (both in top-left origin coordinates).
 /// The bottom edge is left alone because the Dock usually lives there.

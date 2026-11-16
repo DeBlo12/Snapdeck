@@ -12,6 +12,10 @@ Written in Swift using only Apple system frameworks. No third-party dependencies
   Pressing left or right again moves the window to the next display.
 - **Drag to edge**: drag a window to the left, right or top edge (or a top/side corner)
   and drop it on the preview.
+- **Drop into a layout zone**: hold Shift while dragging a window to see the active
+  layout's zones, and drop the window into one.
+- **Snap groups**: windows that Snapdeck arranged on a screen come forward together
+  when you switch to one of them, so the arrangement is not left half covered.
 - **Layouts**: named combinations of zones, such as "Main + Stack". Send the focused
   window to a zone, or arrange the front-most windows into the layout in one step.
 - **Setups**: save where all your windows are and restore that arrangement later.

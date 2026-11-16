@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = Store()
     private let settings = Settings()
     private lazy var windowManager = WindowManager(store: store, settings: settings)
-    private lazy var dragSnap = DragSnapController(windowManager: windowManager, settings: settings)
+    private lazy var dragSnap = DragSnapController(windowManager: windowManager, settings: settings, store: store)
     /// Previews shown while hovering over menu items.
     private let menuOverlay = OverlayController()
     private var statusItem: NSStatusItem!
@@ -28,6 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settings.onShortcutsChanged = { [weak self] in self?.registerHotkeys() }
         registerHotkeys()
         dragSnap.start()
+
+        // Snap groups: when the user switches to another app, bring the rest of the
+        // arrangement forward with the window that now has focus.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self?.windowManager.raiseGroupOfFocusedWindow()
+            }
+        }
 
         if CommandLine.arguments.contains("--settings") { showSettings() }
         windowManager.confirmLaunch = { names in

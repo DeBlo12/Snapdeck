@@ -63,6 +63,16 @@ final class Settings: ObservableObject {
         didSet { defaults.set(dragSnapEnabled, forKey: "dragSnapEnabled") }
     }
 
+    /// Holding Shift while dragging a window shows the active layout's zones to drop into.
+    @Published var dragLayoutEnabled: Bool {
+        didSet { defaults.set(dragLayoutEnabled, forKey: "dragLayoutEnabled") }
+    }
+
+    /// Bring the other snapped windows forward when one of them comes to the front.
+    @Published var snapGroupsEnabled: Bool {
+        didSet { defaults.set(snapGroupsEnabled, forKey: "snapGroupsEnabled") }
+    }
+
     /// Space between snapped windows, in points.
     @Published var gap: Double {
         didSet { defaults.set(gap, forKey: "gap") }
@@ -82,6 +92,8 @@ final class Settings: ObservableObject {
 
     init() {
         dragSnapEnabled = defaults.object(forKey: "dragSnapEnabled") as? Bool ?? true
+        dragLayoutEnabled = defaults.object(forKey: "dragLayoutEnabled") as? Bool ?? true
+        snapGroupsEnabled = defaults.object(forKey: "snapGroupsEnabled") as? Bool ?? true
         gap = defaults.double(forKey: "gap")
         modifiers = defaults.string(forKey: "modifiers").flatMap(Modifiers.init(rawValue:)) ?? .controlOption
     }
