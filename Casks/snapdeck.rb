@@ -1,7 +1,7 @@
 # The version and sha256 lines are rewritten by .github/workflows/release.yml.
 cask "snapdeck" do
   version "1.0.0"
-  sha256 :no_check
+  sha256 "f10d964cb24837191ff7ce2f673a169d0c5b4a714637fa85210e8c49819f10da"
 
   url "https://github.com/DeBlo12/Snapdeck/releases/download/v#{version}/Snapdeck-#{version}.zip"
   name "Snapdeck"
