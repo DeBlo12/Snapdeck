@@ -2,6 +2,7 @@ import AppKit
 import ServiceManagement
 import SnapdeckCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var settings: Settings
@@ -55,6 +56,29 @@ private struct GeneralTab: View {
                         .frame(width: 40, alignment: .trailing)
                 }
             }
+            Section("Ignored apps") {
+                ForEach(settings.ignoredApps, id: \.self) { bundleID in
+                    HStack {
+                        Text(appName(bundleID))
+                        Spacer()
+                        Button("Remove") { settings.ignoredApps.removeAll { $0 == bundleID } }
+                    }
+                }
+                HStack {
+                    Text("Snapdeck never moves the windows of these apps.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Menu("Add App") {
+                        ForEach(runningApps(), id: \.id) { app in
+                            Button(app.name) { ignore(app.id) }
+                        }
+                        Divider()
+                        Button("Choose…", action: chooseApp)
+                    }
+                    .fixedSize()
+                }
+            }
             Section("Permission") {
                 HStack {
                     Image(systemName: trusted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
@@ -72,6 +96,36 @@ private struct GeneralTab: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             trusted = Accessibility.isTrusted
         }
+    }
+}
+
+private extension GeneralTab {
+    func appName(_ bundleID: String) -> String {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+            .map { FileManager.default.displayName(atPath: $0.path) } ?? bundleID
+    }
+
+    /// Running apps with windows that are not ignored yet.
+    func runningApps() -> [(id: String, name: String)] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap { app in app.bundleIdentifier.map { (id: $0, name: app.localizedName ?? $0) } }
+            .filter { !settings.ignoredApps.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    func ignore(_ bundleID: String) {
+        if !settings.ignoredApps.contains(bundleID) { settings.ignoredApps.append(bundleID) }
+    }
+
+    func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier else { return }
+        ignore(bundleID)
     }
 }
 

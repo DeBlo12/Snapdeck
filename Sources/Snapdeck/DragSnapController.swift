@@ -40,7 +40,7 @@ final class DragSnapController {
         reset()
         guard settings.dragSnapEnabled || settings.dragLayoutEnabled, Accessibility.isTrusted,
               let hit = Accessibility.window(at: Accessibility.mouseLocation),
-              hit.isStandardWindow else { return }
+              hit.isStandardWindow, !windowManager.isIgnored(hit) else { return }
         window = hit
         startFrame = hit.frame
     }
