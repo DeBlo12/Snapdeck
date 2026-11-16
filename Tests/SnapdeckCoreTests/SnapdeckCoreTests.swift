@@ -126,6 +126,27 @@ final class EdgeZoneTests: XCTestCase {
     }
 }
 
+final class ZoneHitTests: XCTestCase {
+    let area = CGRect(x: 0, y: 25, width: 1000, height: 800)
+
+    func testFindsZoneUnderPoint() {
+        let grid: [Zone] = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+        XCTAssertEqual(zoneIndex(at: CGPoint(x: 100, y: 100), zones: grid, in: area), 0)
+        XCTAssertEqual(zoneIndex(at: CGPoint(x: 900, y: 700), zones: grid, in: area), 3)
+    }
+
+    func testOutsideAllZones() {
+        XCTAssertNil(zoneIndex(at: CGPoint(x: 900, y: 100), zones: [.leftHalf], in: area))
+        XCTAssertNil(zoneIndex(at: CGPoint(x: 100, y: 10), zones: [.full], in: area))
+    }
+
+    func testSmallestOverlappingZoneWins() {
+        let centre = Zone(x: 0.25, y: 0.25, width: 0.5, height: 0.5)
+        XCTAssertEqual(zoneIndex(at: CGPoint(x: 500, y: 425), zones: [.full, centre], in: area), 1)
+        XCTAssertEqual(zoneIndex(at: CGPoint(x: 50, y: 50), zones: [.full, centre], in: area), 0)
+    }
+}
+
 final class LayoutEditingTests: XCTestCase {
     func layout(_ name: String) -> Layout { Layout.builtIn.first { $0.name == name }! }
 

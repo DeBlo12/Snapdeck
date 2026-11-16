@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = Store()
     private let settings = Settings()
     private lazy var windowManager = WindowManager(store: store, settings: settings)
-    private lazy var dragSnap = DragSnapController(windowManager: windowManager, settings: settings)
+    private lazy var dragSnap = DragSnapController(windowManager: windowManager, settings: settings, store: store)
     /// Previews shown while hovering over menu items.
     private let menuOverlay = OverlayController()
     private var statusItem: NSStatusItem!
