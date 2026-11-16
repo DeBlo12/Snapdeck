@@ -55,6 +55,12 @@ Releases are published on GitHub and can be installed with Homebrew:
 brew tap DeBlo12/snapdeck https://github.com/DeBlo12/Snapdeck
 ```
 
+Homebrew does not load packages from third-party taps until you trust them:
+
+```bash
+brew trust --cask deblo12/snapdeck/snapdeck
+```
+
 ```bash
 brew install --cask snapdeck
 ```
