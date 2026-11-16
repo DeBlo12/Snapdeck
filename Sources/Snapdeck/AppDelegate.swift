@@ -1,0 +1,267 @@
+import AppKit
+import Carbon.HIToolbox
+import SnapdeckCore
+import SwiftUI
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private let store = Store()
+    private let settings = Settings()
+    private lazy var windowManager = WindowManager(store: store, settings: settings)
+    private lazy var dragSnap = DragSnapController(windowManager: windowManager, settings: settings)
+    /// Previews shown while hovering over menu items.
+    private let menuOverlay = OverlayController()
+    private var statusItem: NSStatusItem!
+    private var settingsWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        store.load()
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem.button?.image = NSImage(systemSymbolName: "rectangle.split.2x1",
+                                           accessibilityDescription: "Snapdeck")
+        let menu = NSMenu()
+        menu.delegate = self
+        statusItem.menu = menu
+
+        installMainMenu()
+        if !Accessibility.isTrusted { Accessibility.requestTrust() }
+        settings.onShortcutsChanged = { [weak self] in self?.registerHotkeys() }
+        registerHotkeys()
+        dragSnap.start()
+
+        if CommandLine.arguments.contains("--settings") { showSettings() }
+    }
+
+    /// Opening the app again while it is running (Finder, Spotlight) shows the settings.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSettings()
+        return false
+    }
+
+    // MARK: Hotkeys
+
+    private func registerHotkeys() {
+        let wm = windowManager
+        let modifiers = settings.modifiers
+        var failed: [String] = []
+        HotkeyManager.shared.unregisterAll()
+
+        var bindings: [(String, Int, () -> Void)] = [
+            ("←", kVK_LeftArrow, { wm.snap(.left) }),
+            ("→", kVK_RightArrow, { wm.snap(.right) }),
+            ("↑", kVK_UpArrow, { wm.snap(.up) }),
+            ("↓", kVK_DownArrow, { wm.snap(.down) }),
+            ("↩", kVK_Return, { wm.snapFocused(to: .full) }),
+            ("C", kVK_ANSI_C, { wm.centerFocused() }),
+            ("A", kVK_ANSI_A, { wm.arrangeActiveLayout() }),
+        ]
+        // Digits 1...9 move the focused window into that zone of the active layout.
+        let digits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5,
+                      kVK_ANSI_6, kVK_ANSI_7, kVK_ANSI_8, kVK_ANSI_9]
+        for (index, key) in digits.enumerated() {
+            bindings.append(("\(index + 1)", key, { wm.moveFocused(toLayoutZone: index) }))
+        }
+
+        for (label, key, action) in bindings
+        where !HotkeyManager.shared.register(keyCode: key, modifiers: modifiers.carbon, handler: action) {
+            failed.append(modifiers.rawValue + label)
+        }
+        settings.failedHotkeys = failed
+    }
+
+    // MARK: Settings window
+
+    private func showSettings() {
+        if settingsWindow == nil {
+            let view = SettingsView(settings: settings, store: store, windowManager: windowManager)
+            let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+            window.title = "Snapdeck Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// A menu bar app shows no main menu, but its key equivalents still work while
+    /// one of our windows is in front: ⌘, ⌘W ⌘Q and the text editing shortcuts.
+    private func installMainMenu() {
+        let main = NSMenu()
+
+        let appMenu = NSMenu()
+        appMenu.addItem(ActionItem("Settings…", key: ",", mods: .command) { [weak self] in self?.showSettings() })
+        appMenu.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        appMenu.addItem(NSMenuItem(title: "Quit Snapdeck", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+        editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        let editItem = NSMenuItem()
+        editItem.submenu = editMenu
+        main.addItem(editItem)
+
+        NSApp.mainMenu = main
+    }
+
+    // MARK: Status menu
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Submenus share this delegate for hover previews but are built with their parent.
+        guard menu === statusItem.menu else { return }
+        menu.removeAllItems()
+        let wm = windowManager
+        let mods = settings.modifiers.flags
+
+        if !Accessibility.isTrusted {
+            menu.addItem(ActionItem("Grant Accessibility Access…") { Accessibility.openSystemSettings() })
+            menu.addItem(.separator())
+        }
+        if let error = store.loadError {
+            menu.addItem(disabled("⚠︎ \(error)"))
+        }
+        if !settings.failedHotkeys.isEmpty {
+            menu.addItem(disabled("⚠︎ Shortcuts in use elsewhere: \(settings.failedHotkeys.joined(separator: " "))"))
+        }
+
+        // Snap
+        func arrow(_ key: Int) -> String { String(Character(UnicodeScalar(key)!)) }
+        menu.addItem(ActionItem("Left", key: arrow(NSLeftArrowFunctionKey), mods: mods,
+                                preview: { wm.previewSnap(.left) }) { wm.snap(.left) })
+        menu.addItem(ActionItem("Right", key: arrow(NSRightArrowFunctionKey), mods: mods,
+                                preview: { wm.previewSnap(.right) }) { wm.snap(.right) })
+        menu.addItem(ActionItem("Up / Maximise", key: arrow(NSUpArrowFunctionKey), mods: mods,
+                                preview: { wm.previewSnap(.up) }) { wm.snap(.up) })
+        menu.addItem(ActionItem("Down / Restore", key: arrow(NSDownArrowFunctionKey), mods: mods,
+                                preview: { wm.previewSnap(.down) }) { wm.snap(.down) })
+        menu.addItem(ActionItem("Maximise", key: "\r", mods: mods,
+                                preview: { wm.previewSnapFocused(to: .full) }) { wm.snapFocused(to: .full) })
+        menu.addItem(ActionItem("Centre", key: "c", mods: mods,
+                                preview: { wm.previewCenter() }) { wm.centerFocused() })
+        menu.addItem(.separator())
+
+        // Layouts
+        let active = store.activeLayout
+        let layoutMenu = NSMenu()
+        layoutMenu.delegate = self
+        for layout in store.layouts {
+            let item = ActionItem("\(layout.name)  (\(layout.zones.count) zones)",
+                                  preview: { wm.previewLayout(layout) }) { [store] in
+                store.setActiveLayout(layout)
+            }
+            item.state = layout.name == active?.name ? .on : .off
+            layoutMenu.addItem(item)
+        }
+        let layoutItem = ActionItem("Layout: \(active?.name ?? "none")",
+                                    preview: { active.map { wm.previewLayout($0) } ?? [] }) {}
+        layoutItem.submenu = layoutMenu
+        menu.addItem(layoutItem)
+
+        if let active {
+            let zoneMenu = NSMenu()
+            zoneMenu.delegate = self
+            for (index, zone) in active.zones.enumerated() {
+                zoneMenu.addItem(ActionItem("Zone \(index + 1)", key: index < 9 ? "\(index + 1)" : "", mods: mods,
+                                            preview: { wm.previewSnapFocused(to: zone) }) {
+                    wm.snapFocused(to: zone)
+                })
+            }
+            let zoneItem = ActionItem("Move Window to Zone", preview: { wm.previewLayout(active) }) {}
+            zoneItem.submenu = zoneMenu
+            menu.addItem(zoneItem)
+        }
+        menu.addItem(ActionItem("Arrange Windows in Layout", key: "a", mods: mods,
+                                preview: { wm.previewArrange() }) { wm.arrangeActiveLayout() })
+        menu.addItem(.separator())
+
+        // Setups
+        menu.addItem(disabled("Saved Setups"))
+        for setup in store.setups {
+            menu.addItem(ActionItem("Restore “\(setup.name)”", preview: { wm.previewSetup(setup) }) {
+                wm.restore(setup)
+            })
+        }
+        menu.addItem(ActionItem("Save Current Setup…") { [weak self] in self?.saveSetup() })
+        menu.addItem(.separator())
+
+        // App
+        menu.addItem(ActionItem("Settings…", key: ",", mods: .command) { [weak self] in self?.showSettings() })
+        menu.addItem(ActionItem("Quit Snapdeck", key: "q", mods: .command) { NSApp.terminate(nil) })
+    }
+
+    /// Hovering over an item shows where its action would put things.
+    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
+        let specs = (item as? ActionItem)?.preview?() ?? []
+        if specs.isEmpty {
+            // Moving within a submenu must not wipe the parent item's preview logic:
+            // an item without a preview simply shows nothing.
+            menuOverlay.hide()
+        } else {
+            menuOverlay.show(specs)
+        }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        if menu === statusItem.menu { menuOverlay.hide() }
+    }
+
+    private func disabled(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
+    private func saveSetup() {
+        // Capture first: showing the dialog changes which app is in front.
+        let captured = windowManager.captureSetup(named: "")
+
+        let alert = NSAlert()
+        alert.messageText = "Save Current Setup"
+        alert.informativeText = "\(captured.windows.count) windows will be remembered. "
+            + "Saving under an existing name replaces that setup."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.placeholderString = "Name, e.g. Coding"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        store.save(WindowSetup(name: name, windows: captured.windows))
+    }
+}
+
+/// A menu item that runs a closure and can describe what it would do.
+final class ActionItem: NSMenuItem {
+    /// Rectangles to show on screen while the item is highlighted.
+    let preview: (() -> [OverlaySpec])?
+    private let handler: () -> Void
+
+    init(_ title: String, key: String = "", mods: NSEvent.ModifierFlags = [],
+         preview: (() -> [OverlaySpec])? = nil, handler: @escaping () -> Void) {
+        self.preview = preview
+        self.handler = handler
+        super.init(title: title, action: #selector(fire), keyEquivalent: key)
+        keyEquivalentModifierMask = mods
+        target = self
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    @objc private func fire() {
+        handler()
+    }
+}
