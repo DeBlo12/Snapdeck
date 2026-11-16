@@ -98,6 +98,11 @@ final class Settings: ObservableObject {
         didSet { defaults.set(displayProfilesEnabled, forKey: "displayProfilesEnabled") }
     }
 
+    /// Bundle identifiers of apps whose windows Snapdeck never moves.
+    @Published var ignoredApps: [String] {
+        didSet { defaults.set(ignoredApps, forKey: "ignoredApps") }
+    }
+
     /// Space between snapped windows, in points.
     @Published var gap: Double {
         didSet { defaults.set(gap, forKey: "gap") }
@@ -139,6 +144,7 @@ final class Settings: ObservableObject {
         dragLayoutEnabled = defaults.object(forKey: "dragLayoutEnabled") as? Bool ?? true
         snapGroupsEnabled = defaults.object(forKey: "snapGroupsEnabled") as? Bool ?? true
         displayProfilesEnabled = defaults.bool(forKey: "displayProfilesEnabled")
+        ignoredApps = defaults.stringArray(forKey: "ignoredApps") ?? []
         gap = defaults.double(forKey: "gap")
         customShortcuts = defaults.data(forKey: "customShortcuts")
             .flatMap { try? JSONDecoder().decode([String: KeyCombo].self, from: $0) } ?? [:]

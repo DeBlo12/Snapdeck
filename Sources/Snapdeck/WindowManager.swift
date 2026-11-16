@@ -68,6 +68,20 @@ final class WindowManager {
         zone.frame(in: screen.visible, gap: CGFloat(settings.gap))
     }
 
+    // MARK: Ignored apps
+
+    func isIgnored(bundleID: String?) -> Bool {
+        bundleID.map(settings.ignoredApps.contains) ?? false
+    }
+
+    /// True for windows of apps the user asked Snapdeck to leave alone.
+    func isIgnored(_ window: AXUIElement) -> Bool {
+        guard !settings.ignoredApps.isEmpty else { return false }
+        var pid: pid_t = 0
+        AXUIElementGetPid(window, &pid)
+        return isIgnored(bundleID: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier)
+    }
+
     // MARK: Placing
 
     func place(_ window: AXUIElement, in zone: Zone, on screen: ScreenInfo) {
@@ -153,7 +167,7 @@ final class WindowManager {
     // MARK: Resolving actions on the focused window
 
     private func focused() -> (window: AXUIElement, frame: CGRect, screen: ScreenInfo)? {
-        guard let window = Accessibility.focusedWindow(), let frame = window.frame,
+        guard let window = Accessibility.focusedWindow(), !isIgnored(window), let frame = window.frame,
               let screen = screen(for: frame) else { return nil }
         return (window, frame, screen)
     }
@@ -229,7 +243,7 @@ final class WindowManager {
     private func arrangement() -> [(AXUIElement, Zone, ScreenInfo)] {
         guard let layout = store.activeLayout, let screen = currentScreen() else { return [] }
         let onScreen = windowsFrontToBack().filter { window in
-            window.frame.flatMap { self.screen(for: $0) } == screen
+            !isIgnored(window) && window.frame.flatMap { self.screen(for: $0) } == screen
         }
         return zip(onScreen, layout.zones).map { ($0, $1, screen) }
     }
@@ -277,7 +291,7 @@ final class WindowManager {
         var entries: [WindowSetup.Entry] = []
 
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
-            guard let bundleID = app.bundleIdentifier else { continue }
+            guard let bundleID = app.bundleIdentifier, !isIgnored(bundleID: bundleID) else { continue }
             for window in Accessibility.windows(pid: app.processIdentifier) {
                 guard let frame = window.frame, let screen = screen(for: frame),
                       let index = screens.firstIndex(of: screen) else { continue }
@@ -313,6 +327,7 @@ final class WindowManager {
 
         if launchMissing {
             let missing = Set(setup.windows.map(\.bundleID))
+                .filter { !isIgnored(bundleID: $0) }
                 .filter { NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty }
                 .compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
                 .map { $0.deletingPathExtension().lastPathComponent }
@@ -320,7 +335,8 @@ final class WindowManager {
             if !missing.isEmpty { launchMissing = confirmLaunch?(missing) ?? false }
         }
 
-        for (bundleID, entries) in Dictionary(grouping: setup.windows, by: \.bundleID) {
+        for (bundleID, entries) in Dictionary(grouping: setup.windows, by: \.bundleID)
+        where !isIgnored(bundleID: bundleID) {
             let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             guard let app = running.first else {
                 if launchMissing, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {

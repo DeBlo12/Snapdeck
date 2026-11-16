@@ -23,6 +23,7 @@ Written in Swift using only Apple system frameworks. No third-party dependencies
 - **Per-display arrangements** (optional, off by default): Snapdeck remembers where
   windows were for each combination of displays and puts them back when you connect
   or disconnect a monitor.
+- **Ignore list**: apps whose windows Snapdeck should never move (Settings → General).
 - **Hover previews**: hovering over an item in the menu bar menu shows on screen
   where the window (or windows) would go.
 - **Settings** (`⌘,` while the menu is open): launch at login, gap between windows,
