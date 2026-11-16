@@ -45,6 +45,25 @@ all of them, or click a shortcut and press new keys to change just that one.
 | `⌃⌥1` … `⌃⌥9` | Move the window to that zone of the active layout |
 | `⌃⌥A` | Arrange the front-most windows into the active layout |
 
+## Install
+
+Releases are published on GitHub and can be installed with Homebrew:
+
+```bash
+brew tap DeBlo12/snapdeck https://github.com/DeBlo12/Snapdeck
+```
+
+```bash
+brew install --cask snapdeck
+```
+
+Release builds are ad-hoc signed and not notarised by Apple, so macOS blocks them
+on first launch. Allow the app under System Settings → Privacy & Security → "Open
+Anyway", or build from source as described below. Because of the ad-hoc signature,
+Accessibility access has to be granted again after each update.
+
+Maintainers publish a release by pushing a tag such as `v0.2.0`.
+
 ## Build and run
 
 Requires macOS 13 or later and the Swift toolchain (Xcode or the Command Line Tools).
