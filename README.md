@@ -61,7 +61,10 @@ swift test
 
 Config lives in `~/Library/Application Support/Snapdeck` (Settings → Layouts → *Edit layouts.json*).
 
-`layouts.json` holds the layouts and is meant to be edited by hand. Each zone is a
+Layouts are created and changed in Settings → Layouts: select a zone, split it side
+by side or stacked, and drag its handles. Neighbouring zones follow a shared divider.
+
+`layouts.json` holds the layouts and can also be edited by hand. Each zone is a
 fraction of the usable screen area, measured from the top-left corner:
 
 ```json
@@ -94,8 +97,7 @@ Press *Reload* in the settings after editing. `setups.json` is written by
 - If Snapdeck is switched on in the Accessibility list but still reports that access
   is missing, the entry belongs to an older build. Quit Snapdeck, run
   `tccutil reset Accessibility dev.snapdeck.Snapdeck`, start it again and grant access.
-- Only the modifier keys of the shortcuts can be changed, not the individual keys,
-  and there is no visual layout editor.
+- Only the modifier keys of the shortcuts can be changed, not the individual keys.
 
 ## Security
 

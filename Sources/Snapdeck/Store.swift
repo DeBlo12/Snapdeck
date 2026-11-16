@@ -67,6 +67,29 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Saves an edited layout. `originalName` is the layout it replaces, nil for a new one.
+    /// A different layout that already has the new name is replaced too.
+    func saveLayout(_ layout: Layout, replacing originalName: String?) {
+        let wasActive = originalName != nil && activeLayout?.name == originalName
+        var updated = layouts.filter { $0.name != layout.name || $0.name == originalName }
+        if let index = updated.firstIndex(where: { $0.name == originalName }) {
+            updated[index] = layout
+        } else {
+            updated.append(layout)
+        }
+        layouts = updated
+        write(layouts, to: layoutsURL)
+        if wasActive { setActiveLayout(layout) }
+    }
+
+    /// Deletes a layout. The last layout cannot be deleted.
+    func deleteLayout(named name: String) {
+        guard layouts.count > 1 else { return }
+        layouts.removeAll { $0.name == name }
+        write(layouts, to: layoutsURL)
+        objectWillChange.send()
+    }
+
     /// Adds a setup, replacing any existing one with the same name.
     func save(_ setup: WindowSetup) {
         setups.removeAll { $0.name == setup.name }

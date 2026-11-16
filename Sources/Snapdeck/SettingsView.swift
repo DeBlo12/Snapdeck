@@ -110,8 +110,17 @@ private struct ShortcutsTab: View {
 
 // MARK: Layouts
 
+/// A layout being created or changed in the editor.
+private struct LayoutDraft: Identifiable {
+    let id = UUID()
+    /// Name of the layout being replaced; nil for a new layout.
+    let originalName: String?
+    let layout: SnapdeckCore.Layout
+}
+
 private struct LayoutsTab: View {
     @ObservedObject var store: Store
+    @State private var draft: LayoutDraft?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -129,6 +138,9 @@ private struct LayoutsTab: View {
                     if isActive {
                         Image(systemName: "checkmark").foregroundColor(.accentColor)
                     }
+                    Button("Edit") { draft = LayoutDraft(originalName: layout.name, layout: layout) }
+                    Button("Delete", role: .destructive) { store.deleteLayout(named: layout.name) }
+                        .disabled(store.layouts.count <= 1)
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { store.setActiveLayout(layout) }
@@ -137,13 +149,133 @@ private struct LayoutsTab: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundColor(.orange)
             }
             HStack {
-                Text("Layouts are defined in layouts.json.").foregroundColor(.secondary)
+                Button("New Layout…") {
+                    draft = LayoutDraft(originalName: nil, layout: .init(name: "", zones: [.leftHalf, .rightHalf]))
+                }
                 Spacer()
                 Button("Edit layouts.json") { NSWorkspace.shared.open(store.layoutsURL) }
                 Button("Reload") { store.load() }
             }
         }
         .padding()
+        .sheet(item: $draft) { draft in
+            LayoutEditor(layout: draft.layout,
+                         onSave: { edited in
+                             store.saveLayout(edited, replacing: draft.originalName)
+                             self.draft = nil
+                         },
+                         onCancel: { self.draft = nil })
+        }
+    }
+}
+
+/// Visual editor: select a zone, split it, drag its edges.
+private struct LayoutEditor: View {
+    @State var layout: SnapdeckCore.Layout
+    let onSave: (SnapdeckCore.Layout) -> Void
+    let onCancel: () -> Void
+    @State private var selected: Int? = 0
+
+    private var trimmedName: String { layout.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("Layout name", text: $layout.name)
+                .textFieldStyle(.roundedBorder)
+
+            canvas
+                .frame(width: 480, height: 300)
+
+            HStack {
+                Button("Split Side by Side") { split(sideBySide: true) }
+                Button("Split Stacked") { split(sideBySide: false) }
+                Button("Remove Zone", role: .destructive) {
+                    if let index = selected, layout.removeZone(at: index) {
+                        selected = min(index, layout.zones.count - 1)
+                    }
+                }
+                .disabled(layout.zones.count <= 1)
+                Spacer()
+                if let index = selected, layout.zones.indices.contains(index) {
+                    let zone = layout.zones[index]
+                    Text("Zone \(index + 1): \(Int((zone.width * 100).rounded()))% × \(Int((zone.height * 100).rounded()))%")
+                        .foregroundColor(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .disabled(selected == nil)
+
+            Text("Click a zone to select it, then drag its handles or split it. Zone numbers match the shortcuts.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    var result = layout
+                    result.name = trimmedName
+                    onSave(result)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(trimmedName.isEmpty)
+            }
+        }
+        .padding(20)
+    }
+
+    private func split(sideBySide: Bool) {
+        guard let index = selected else { return }
+        layout.splitZone(at: index, sideBySide: sideBySide)
+    }
+
+    private var canvas: some View {
+        GeometryReader { geometry in
+            let bounds = CGRect(origin: .zero, size: geometry.size)
+            ZStack {
+                ForEach(Array(layout.zones.enumerated()), id: \.offset) { index, zone in
+                    let rect = zone.frame(in: bounds).insetBy(dx: 2, dy: 2)
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.accentColor.opacity(selected == index ? 0.55 : 0.22))
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.accentColor, lineWidth: selected == index ? 2 : 1))
+                        .overlay(Text("\(index + 1)").font(.title2.weight(.semibold)))
+                        .frame(width: rect.width, height: rect.height)
+                        .position(x: rect.midX, y: rect.midY)
+                        .onTapGesture { selected = index }
+                }
+                if let index = selected, layout.zones.indices.contains(index) {
+                    let rect = layout.zones[index].frame(in: bounds)
+                    ForEach(Array(ZoneEdge.allCases.enumerated()), id: \.offset) { _, edge in
+                        handle(edge, zone: index, rect: rect, size: geometry.size)
+                    }
+                }
+            }
+        }
+        .coordinateSpace(name: "canvas")
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
+    }
+
+    /// A draggable bar on one edge of the selected zone.
+    private func handle(_ edge: ZoneEdge, zone index: Int, rect: CGRect, size: CGSize) -> some View {
+        let vertical = edge == .left || edge == .right
+        let center: CGPoint
+        switch edge {
+        case .left: center = CGPoint(x: rect.minX + 5, y: rect.midY)
+        case .right: center = CGPoint(x: rect.maxX - 5, y: rect.midY)
+        case .top: center = CGPoint(x: rect.midX, y: rect.minY + 5)
+        case .bottom: center = CGPoint(x: rect.midX, y: rect.maxY - 5)
+        }
+        return Capsule()
+            .fill(Color.white)
+            .shadow(radius: 1.5)
+            .frame(width: vertical ? 7 : max(rect.width * 0.35, 24), height: vertical ? max(rect.height * 0.35, 24) : 7)
+            .contentShape(Rectangle().inset(by: -6))
+            .position(center)
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .named("canvas")).onChanged { value in
+                let position = vertical ? value.location.x / size.width : value.location.y / size.height
+                layout.moveEdge(edge, ofZone: index, to: Double(position))
+            })
     }
 }
 

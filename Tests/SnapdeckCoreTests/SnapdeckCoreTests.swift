@@ -126,6 +126,74 @@ final class EdgeZoneTests: XCTestCase {
     }
 }
 
+final class LayoutEditingTests: XCTestCase {
+    func layout(_ name: String) -> Layout { Layout.builtIn.first { $0.name == name }! }
+
+    func testSplitSideBySide() {
+        var l = Layout(name: "t", zones: [.full])
+        XCTAssertTrue(l.splitZone(at: 0, sideBySide: true))
+        XCTAssertEqual(l.zones, [.leftHalf, .rightHalf])
+        XCTAssertTrue(l.splitZone(at: 1, sideBySide: false))
+        XCTAssertEqual(l.zones, [.leftHalf, .topRight, .bottomRight])
+    }
+
+    func testSplitRefusesTinyZones() {
+        var l = Layout(name: "t", zones: [Zone(x: 0, y: 0, width: 0.15, height: 1)])
+        XCTAssertFalse(l.splitZone(at: 0, sideBySide: true))
+        XCTAssertEqual(l.zones.count, 1)
+    }
+
+    func testRemoveKeepsLastZone() {
+        var l = Layout(name: "t", zones: [.leftHalf, .rightHalf])
+        XCTAssertTrue(l.removeZone(at: 0))
+        XCTAssertFalse(l.removeZone(at: 0))
+        XCTAssertEqual(l.zones, [.rightHalf])
+    }
+
+    func testMovingSharedDividerMovesAllNeighbours() {
+        var l = layout("Main + Stack")
+        l.moveEdge(.right, ofZone: 0, to: 0.7)
+        XCTAssertEqual(l.zones[0].width, 0.7, accuracy: 1e-9)
+        for i in [1, 2] {
+            XCTAssertEqual(l.zones[i].x, 0.7, accuracy: 1e-9)
+            XCTAssertEqual(l.zones[i].width, 0.3, accuracy: 1e-9)
+        }
+    }
+
+    func testMovingStackDividerLeavesMainZoneAlone() {
+        var l = layout("Main + Stack")
+        l.moveEdge(.bottom, ofZone: 1, to: 0.25)
+        XCTAssertEqual(l.zones[0], Zone(x: 0, y: 0, width: 0.6, height: 1))
+        XCTAssertEqual(l.zones[1].height, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(l.zones[2].y, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(l.zones[2].height, 0.75, accuracy: 1e-9)
+    }
+
+    func testEdgeIsClampedToMinimumSize() {
+        var l = Layout(name: "t", zones: [.leftHalf, .rightHalf])
+        l.moveEdge(.right, ofZone: 0, to: 0.99)
+        XCTAssertEqual(l.zones[1].width, Layout.minimumZoneSize, accuracy: 1e-9)
+        l.moveEdge(.right, ofZone: 0, to: -1)
+        XCTAssertEqual(l.zones[0].width, Layout.minimumZoneSize, accuracy: 1e-9)
+        XCTAssertTrue(l.zones.allSatisfy(\.isValid))
+    }
+
+    func testBorderEdgeMovesOnlyThatZone() {
+        var l = Layout(name: "t", zones: [.topLeft, .bottomLeft, .rightHalf])
+        l.moveEdge(.left, ofZone: 0, to: 0.2)
+        XCTAssertEqual(l.zones[0].x, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(l.zones[0].width, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(l.zones[1], .bottomLeft)
+        XCTAssertEqual(l.zones[2], .rightHalf)
+    }
+
+    func testPositionSnapsToStep() {
+        var l = Layout(name: "t", zones: [.leftHalf, .rightHalf])
+        l.moveEdge(.right, ofZone: 0, to: 0.3301)
+        XCTAssertEqual(l.zones[0].width, 1.0 / 3, accuracy: 1e-9)
+    }
+}
+
 final class WindowSetupTests: XCTestCase {
     func testTitleIsStoredOnlyAsHash() throws {
         let entry = WindowSetup.Entry(bundleID: "com.example.app", title: "Secret plan.txt", screen: 0, zone: .leftHalf)
