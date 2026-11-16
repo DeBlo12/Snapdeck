@@ -8,7 +8,7 @@ cask "snapdeck" do
   desc "Window manager with Windows-style snapping, layouts and saved setups"
   homepage "https://github.com/DeBlo12/Snapdeck"
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "Snapdeck.app"
 
