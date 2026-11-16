@@ -7,9 +7,10 @@ swift build -c release
 
 APP="build/Snapdeck.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Snapdeck "$APP/Contents/MacOS/Snapdeck"
 cp Support/Info.plist "$APP/Contents/Info.plist"
+cp Support/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # Releases pass the version of their tag.
 if [ -n "${VERSION:-}" ]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
