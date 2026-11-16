@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="96" alt="Snapdeck icon">
+
 # Snapdeck
 
 A small, native window manager for macOS that works like window management on Windows:
@@ -151,6 +153,7 @@ sure what you are granting Accessibility access to.
 - `Sources/SnapdeckCore`: pure geometry and models, covered by unit tests.
 - `Sources/Snapdeck`: the menu bar app (Accessibility, hotkeys, drag snapping, menu).
 - `scripts/bundle.sh`: builds `build/Snapdeck.app`.
+- `scripts/make-icon.sh`: redraws the app icon (`Support/AppIcon.icns`) from code.
 
 ## Licence
 
