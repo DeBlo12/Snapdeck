@@ -30,7 +30,8 @@ Written in Swift using only Apple system frameworks. No third-party dependencies
 
 ## Shortcuts
 
-The default modifier keys are Control + Option; they can be changed in the settings.
+These are the defaults. In Settings → Shortcuts you can change the modifier keys for
+all of them, or click a shortcut and press new keys to change just that one.
 
 | Shortcut | Action |
 | --- | --- |
@@ -104,7 +105,7 @@ Press *Reload* in the settings after editing. `setups.json` is written by
 - If Snapdeck is switched on in the Accessibility list but still reports that access
   is missing, the entry belongs to an older build. Quit Snapdeck, run
   `tccutil reset Accessibility dev.snapdeck.Snapdeck`, start it again and grant access.
-- Only the modifier keys of the shortcuts can be changed, not the individual keys.
+- The zone shortcuts (1–9) always use the default modifier keys and digits.
 
 ## Security
 
