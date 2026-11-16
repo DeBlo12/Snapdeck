@@ -99,6 +99,15 @@ public struct WindowSetup: Codable, Equatable, Sendable {
     }
 }
 
+/// Identifies a display configuration by the size and position of every screen,
+/// independent of the order in which the screens are listed.
+public func displayKey(frames: [CGRect]) -> String {
+    frames
+        .sorted { ($0.minX, $0.minY) < ($1.minX, $1.minY) }
+        .map { "\(Int($0.width))x\(Int($0.height))@\(Int($0.minX)),\(Int($0.minY))" }
+        .joined(separator: "|")
+}
+
 /// Pairs the saved windows of one app with its live windows.
 /// Exact title matches win; the rest are paired in order.
 /// Returns, for each saved title, the index of the live window to use (or nil).

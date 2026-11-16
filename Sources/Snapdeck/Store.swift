@@ -10,6 +10,10 @@ final class Store: ObservableObject {
     /// Set when a config file could not be read; shown in the menu and settings.
     @Published private(set) var loadError: String?
 
+    /// Automatically recorded arrangement per display configuration (see DisplayProfileController).
+    @Published private(set) var displaySetups: [String: WindowSetup] = [:]
+    private var displaySetupsURL: URL { directory.appendingPathComponent("display-setups.json") }
+
     var layoutsURL: URL { directory.appendingPathComponent("layouts.json") }
     private var setupsURL: URL { directory.appendingPathComponent("setups.json") }
     private let activeLayoutKey = "activeLayout"
@@ -39,7 +43,7 @@ final class Store: ObservableObject {
         if !FileManager.default.fileExists(atPath: layoutsURL.path) {
             write(Layout.builtIn, to: layoutsURL)
         }
-        for url in [layoutsURL, setupsURL] where FileManager.default.fileExists(atPath: url.path) {
+        for url in [layoutsURL, setupsURL, displaySetupsURL] where FileManager.default.fileExists(atPath: url.path) {
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         }
         do {
@@ -65,6 +69,22 @@ final class Store: ObservableObject {
                 loadError = "setups.json could not be read"
             }
         }
+
+        if let data = try? Data(contentsOf: displaySetupsURL),
+           let loaded = try? JSONDecoder().decode([String: WindowSetup].self, from: data) {
+            displaySetups = loaded.mapValues { WindowSetup(name: $0.name, windows: $0.windows.filter(\.isSane)) }
+        }
+    }
+
+    func saveDisplaySetup(_ setup: WindowSetup, for key: String) {
+        guard displaySetups[key] != setup else { return }
+        displaySetups[key] = setup
+        write(displaySetups, to: displaySetupsURL)
+    }
+
+    func clearDisplaySetups() {
+        displaySetups = [:]
+        try? FileManager.default.removeItem(at: displaySetupsURL)
     }
 
     /// Saves an edited layout. `originalName` is the layout it replaces, nil for a new one.

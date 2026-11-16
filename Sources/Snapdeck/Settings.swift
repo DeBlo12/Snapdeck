@@ -73,6 +73,11 @@ final class Settings: ObservableObject {
         didSet { defaults.set(snapGroupsEnabled, forKey: "snapGroupsEnabled") }
     }
 
+    /// Record the arrangement per display configuration and restore it when displays change.
+    @Published var displayProfilesEnabled: Bool {
+        didSet { defaults.set(displayProfilesEnabled, forKey: "displayProfilesEnabled") }
+    }
+
     /// Space between snapped windows, in points.
     @Published var gap: Double {
         didSet { defaults.set(gap, forKey: "gap") }
@@ -94,6 +99,7 @@ final class Settings: ObservableObject {
         dragSnapEnabled = defaults.object(forKey: "dragSnapEnabled") as? Bool ?? true
         dragLayoutEnabled = defaults.object(forKey: "dragLayoutEnabled") as? Bool ?? true
         snapGroupsEnabled = defaults.object(forKey: "snapGroupsEnabled") as? Bool ?? true
+        displayProfilesEnabled = defaults.bool(forKey: "displayProfilesEnabled")
         gap = defaults.double(forKey: "gap")
         modifiers = defaults.string(forKey: "modifiers").flatMap(Modifiers.init(rawValue:)) ?? .controlOption
     }

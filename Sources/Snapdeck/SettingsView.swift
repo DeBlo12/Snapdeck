@@ -16,11 +16,11 @@ struct SettingsView: View {
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
             LayoutsTab(store: store)
                 .tabItem { Label("Layouts", systemImage: "rectangle.split.3x1") }
-            SetupsTab(store: store, windowManager: windowManager)
+            SetupsTab(store: store, settings: settings, windowManager: windowManager)
                 .tabItem { Label("Setups", systemImage: "macwindow.on.rectangle") }
         }
         .padding()
-        .frame(width: 540, height: 440)
+        .frame(width: 540, height: 500)
     }
 }
 
@@ -304,6 +304,7 @@ private struct LayoutThumbnail: View {
 
 private struct SetupsTab: View {
     @ObservedObject var store: Store
+    @ObservedObject var settings: Settings
     let windowManager: WindowManager
     @State private var name = ""
 
@@ -334,6 +335,18 @@ private struct SetupsTab: View {
             Text("Saving under an existing name replaces that setup.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            Divider()
+            Toggle("Remember the arrangement for each display configuration", isOn: $settings.displayProfilesEnabled)
+            HStack {
+                Text("When you connect or disconnect a display, windows return to where they were "
+                     + "the last time that combination of displays was in use. "
+                     + "Remembered: \(store.displaySetups.count).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("Forget") { store.clearDisplaySetups() }
+                    .disabled(store.displaySetups.isEmpty)
+            }
         }
         .padding()
     }
