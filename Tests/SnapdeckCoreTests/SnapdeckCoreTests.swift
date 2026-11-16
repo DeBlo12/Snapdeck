@@ -126,6 +126,42 @@ final class EdgeZoneTests: XCTestCase {
     }
 }
 
+final class AdjacentScreenTests: XCTestCase {
+    // Laptop in the middle, one display on each side and one above.
+    let laptop = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+    let right = CGRect(x: 1728, y: -100, width: 1920, height: 1080)
+    let left = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+    let above = CGRect(x: -100, y: -1440, width: 2560, height: 1440)
+
+    func testAllFourDirections() {
+        let frames = [laptop, right, left, above]
+        XCTAssertEqual(adjacentScreen(from: 0, direction: .right, frames: frames), 1)
+        XCTAssertEqual(adjacentScreen(from: 0, direction: .left, frames: frames), 2)
+        XCTAssertEqual(adjacentScreen(from: 0, direction: .up, frames: frames), 3)
+        XCTAssertNil(adjacentScreen(from: 0, direction: .down, frames: frames))
+        XCTAssertEqual(adjacentScreen(from: 3, direction: .down, frames: frames), 0)
+    }
+
+    func testNearestScreenWins() {
+        let farRight = CGRect(x: 3648, y: 0, width: 1920, height: 1080)
+        XCTAssertEqual(adjacentScreen(from: 0, direction: .right, frames: [laptop, farRight, right]), 2)
+        XCTAssertEqual(adjacentScreen(from: 1, direction: .left, frames: [laptop, farRight, right]), 2)
+    }
+
+    func testSingleScreenHasNoNeighbour() {
+        for direction in [Direction.left, .right, .up, .down] {
+            XCTAssertNil(adjacentScreen(from: 0, direction: direction, frames: [laptop]))
+        }
+    }
+
+    func testDiagonalNeighbourCountsOnlyInItsMainDirection() {
+        // Entirely above and to the right, no shared edge range; further up than across.
+        let diagonal = CGRect(x: 1728, y: -2000, width: 1000, height: 800)
+        XCTAssertEqual(adjacentScreen(from: 0, direction: .up, frames: [laptop, diagonal]), 1)
+        XCTAssertNil(adjacentScreen(from: 0, direction: .right, frames: [laptop, diagonal]))
+    }
+}
+
 final class ZoneHitTests: XCTestCase {
     let area = CGRect(x: 0, y: 25, width: 1000, height: 800)
 

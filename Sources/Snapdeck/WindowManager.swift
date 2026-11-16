@@ -59,8 +59,8 @@ final class WindowManager {
     private func adjacentScreen(to screen: ScreenInfo, direction: Direction) -> ScreenInfo? {
         let screens = Accessibility.screens()
         guard let index = screens.firstIndex(of: screen) else { return nil }
-        let target = direction == .left ? index - 1 : index + 1
-        return screens.indices.contains(target) ? screens[target] : nil
+        return SnapdeckCore.adjacentScreen(from: index, direction: direction, frames: screens.map(\.frame))
+            .map { screens[$0] }
     }
 
     /// Where `zone` ends up on `screen`, including the configured gap.
@@ -194,6 +194,13 @@ final class WindowManager {
         focused().map { .place($0.window, zone, $0.screen) }
     }
 
+    /// Moves the window to the neighbouring display, keeping its place within the screen.
+    private func displayMove(_ direction: Direction) -> Move? {
+        guard let (window, frame, screen) = focused(),
+              let other = adjacentScreen(to: screen, direction: direction) else { return nil }
+        return .place(window, currentZone(of: window, frame: frame, screen: screen), other)
+    }
+
     private func centerMove() -> Move? {
         guard let (window, frame, screen) = focused() else { return nil }
         let v = screen.visible
@@ -209,6 +216,9 @@ final class WindowManager {
 
     func snapFocused(to zone: Zone) { perform(move(to: zone)) }
     func previewSnapFocused(to zone: Zone) -> [OverlaySpec] { preview(move(to: zone)) }
+
+    func moveFocusedToDisplay(_ direction: Direction) { perform(displayMove(direction)) }
+    func previewMoveToDisplay(_ direction: Direction) -> [OverlaySpec] { preview(displayMove(direction)) }
 
     func centerFocused() { perform(centerMove()) }
     func previewCenter() -> [OverlaySpec] { preview(centerMove()) }

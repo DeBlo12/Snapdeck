@@ -49,6 +49,15 @@ final class Settings: ObservableObject {
     /// The actions whose shortcut can be changed individually.
     enum ShortcutAction: String, CaseIterable, Identifiable {
         case left, right, up, down, maximise, centre, arrange
+        case displayLeft, displayRight, displayUp, displayDown
+
+        /// The display actions add one more modifier key to the default ones.
+        var movesToDisplay: Bool {
+            switch self {
+            case .displayLeft, .displayRight, .displayUp, .displayDown: return true
+            default: return false
+            }
+        }
 
         var id: String { rawValue }
 
@@ -61,15 +70,19 @@ final class Settings: ObservableObject {
             case .maximise: return "Maximise"
             case .centre: return "Centre"
             case .arrange: return "Arrange windows in active layout"
+            case .displayLeft: return "Move to the display on the left"
+            case .displayRight: return "Move to the display on the right"
+            case .displayUp: return "Move to the display above"
+            case .displayDown: return "Move to the display below"
             }
         }
 
         var defaultKey: (code: Int, label: String) {
             switch self {
-            case .left: return (kVK_LeftArrow, "←")
-            case .right: return (kVK_RightArrow, "→")
-            case .up: return (kVK_UpArrow, "↑")
-            case .down: return (kVK_DownArrow, "↓")
+            case .left, .displayLeft: return (kVK_LeftArrow, "←")
+            case .right, .displayRight: return (kVK_RightArrow, "→")
+            case .up, .displayUp: return (kVK_UpArrow, "↑")
+            case .down, .displayDown: return (kVK_DownArrow, "↓")
             case .maximise: return (kVK_Return, "↩")
             case .centre: return (kVK_ANSI_C, "C")
             case .arrange: return (kVK_ANSI_A, "A")
@@ -130,8 +143,13 @@ final class Settings: ObservableObject {
     }
 
     func combo(for action: ShortcutAction) -> KeyCombo {
-        customShortcuts[action.rawValue]
-            ?? KeyCombo(keyCode: action.defaultKey.code, modifiers: modifiers.carbon, label: action.defaultKey.label)
+        if let custom = customShortcuts[action.rawValue] { return custom }
+        var mods = modifiers.carbon
+        if action.movesToDisplay {
+            // Command on top of the default modifiers, or Shift if Command is already one of them.
+            mods |= mods & KeyCombo.command == 0 ? KeyCombo.command : KeyCombo.shift
+        }
+        return KeyCombo(keyCode: action.defaultKey.code, modifiers: mods, label: action.defaultKey.label)
     }
 
     /// Shortcuts another app already owns.

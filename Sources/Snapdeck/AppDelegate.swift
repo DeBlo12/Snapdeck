@@ -126,6 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .maximise: { wm.snapFocused(to: .full) },
             .centre: { wm.centerFocused() },
             .arrange: { wm.arrangeActiveLayout() },
+            .displayLeft: { wm.moveFocusedToDisplay(.left) },
+            .displayRight: { wm.moveFocusedToDisplay(.right) },
+            .displayUp: { wm.moveFocusedToDisplay(.up) },
+            .displayDown: { wm.moveFocusedToDisplay(.down) },
         ]
         for action in Settings.ShortcutAction.allCases {
             guard let handler = handlers[action] else { continue }
@@ -224,6 +228,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                 preview: { wm.previewSnapFocused(to: .full) }) { wm.snapFocused(to: .full) })
         menu.addItem(ActionItem("Centre", key: key(.centre), mods: flags(.centre),
                                 preview: { wm.previewCenter() }) { wm.centerFocused() })
+        if NSScreen.screens.count > 1 {
+            let displayMenu = NSMenu()
+            displayMenu.delegate = self
+            let entries: [(String, Settings.ShortcutAction, Direction)] = [
+                ("Left", .displayLeft, .left), ("Right", .displayRight, .right),
+                ("Above", .displayUp, .up), ("Below", .displayDown, .down),
+            ]
+            for (title, action, direction) in entries {
+                displayMenu.addItem(ActionItem(title, key: key(action), mods: flags(action),
+                                               preview: { wm.previewMoveToDisplay(direction) }) {
+                    wm.moveFocusedToDisplay(direction)
+                })
+            }
+            let displayItem = ActionItem("Move to Display") {}
+            displayItem.submenu = displayMenu
+            menu.addItem(displayItem)
+        }
         menu.addItem(.separator())
 
         // Layouts
