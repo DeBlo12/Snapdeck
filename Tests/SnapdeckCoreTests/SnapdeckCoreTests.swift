@@ -240,6 +240,22 @@ final class WindowSetupTests: XCTestCase {
     }
 }
 
+final class DisplayKeyTests: XCTestCase {
+    let laptop = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+    let external = CGRect(x: 1728, y: -200, width: 2560, height: 1440)
+
+    func testKeyDoesNotDependOnOrder() {
+        XCTAssertEqual(displayKey(frames: [laptop, external]), displayKey(frames: [external, laptop]))
+        XCTAssertEqual(displayKey(frames: [laptop, external]), "1728x1117@0,0|2560x1440@1728,-200")
+    }
+
+    func testDifferentConfigurationsDiffer() {
+        XCTAssertNotEqual(displayKey(frames: [laptop]), displayKey(frames: [laptop, external]))
+        let moved = external.offsetBy(dx: 0, dy: 200)
+        XCTAssertNotEqual(displayKey(frames: [laptop, external]), displayKey(frames: [laptop, moved]))
+    }
+}
+
 final class MatchWindowsTests: XCTestCase {
     func testExactTitlesWinOverOrder() {
         XCTAssertEqual(matchWindows(savedTitles: ["Inbox", "Notes"], liveTitles: ["Notes", "Inbox"]), [1, 0])
