@@ -41,6 +41,7 @@ all of them, or click a shortcut and press new keys to change just that one.
 | `⌃⌥↓` | Top quarter → half → bottom quarter, otherwise restore the original size |
 | `⌃⌥↩` | Maximise |
 | `⌃⌥C` | Centre |
+| `⌃⌥⌘` + arrow | Move the window to the display in that direction, keeping its place |
 | `⌃⌥1` … `⌃⌥9` | Move the window to that zone of the active layout |
 | `⌃⌥A` | Arrange the front-most windows into the active layout |
 
