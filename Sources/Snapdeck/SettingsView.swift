@@ -46,6 +46,7 @@ private struct GeneralTab: View {
             Section("Snapping") {
                 Toggle("Snap windows dragged to a screen edge", isOn: $settings.dragSnapEnabled)
                 Toggle("Hold Shift while dragging to drop into a layout zone", isOn: $settings.dragLayoutEnabled)
+                Toggle("Bring snapped windows forward together", isOn: $settings.snapGroupsEnabled)
                 HStack {
                     Text("Gap between windows")
                     Slider(value: $settings.gap, in: 0...24, step: 2)
