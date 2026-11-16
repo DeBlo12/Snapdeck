@@ -79,34 +79,140 @@ private struct GeneralTab: View {
 
 private struct ShortcutsTab: View {
     @ObservedObject var settings: Settings
+    /// The action whose shortcut is being recorded.
+    @State private var recording: Settings.ShortcutAction?
 
     var body: some View {
         Form {
             Section {
-                Picker("Modifier keys", selection: $settings.modifiers) {
+                Picker("Default modifier keys", selection: $settings.modifiers) {
                     ForEach(Settings.Modifiers.allCases) { choice in
                         Text(choice.name).tag(choice)
                     }
                 }
                 if !settings.failedHotkeys.isEmpty {
-                    Label("Already used by another app: \(settings.failedHotkeys.joined(separator: "  "))",
+                    Label("Already in use: \(settings.failedHotkeys.joined(separator: "  "))",
                           systemImage: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                 }
             }
             Section("Shortcuts") {
-                ForEach(Settings.shortcuts, id: \.action) { shortcut in
+                ForEach(Settings.ShortcutAction.allCases) { action in
                     HStack {
-                        Text(shortcut.action)
+                        Text(action.title)
                         Spacer()
-                        Text("\(settings.modifiers.rawValue) \(shortcut.key)")
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundColor(.secondary)
+                        if settings.customShortcuts[action.rawValue] != nil {
+                            Button("Reset") { settings.customShortcuts[action.rawValue] = nil }
+                                .buttonStyle(.link)
+                        }
+                        recorder(for: action)
                     }
                 }
+                HStack {
+                    Text("Move window to layout zone 1–9")
+                    Spacer()
+                    Text("\(settings.modifiers.rawValue) 1 … 9")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+            }
+            Section {
+                Text("Click a shortcut, then press the new keys. It must include Control, Option or Command. Esc cancels.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onDisappear { stopRecording() }
+    }
+
+    @ViewBuilder
+    private func recorder(for action: Settings.ShortcutAction) -> some View {
+        if recording == action {
+            Text("Press shortcut…")
+                .foregroundColor(.accentColor)
+                .frame(minWidth: 110)
+                .background(KeyCapture { combo in
+                    if let combo { settings.customShortcuts[action.rawValue] = combo }
+                    stopRecording()
+                })
+        } else {
+            Button(settings.combo(for: action).display) {
+                recording = action
+                settings.isRecordingShortcut = true
+            }
+            .font(.system(.body, design: .monospaced))
+            .frame(minWidth: 110)
+        }
+    }
+
+    private func stopRecording() {
+        guard recording != nil || settings.isRecordingShortcut else { return }
+        recording = nil
+        settings.isRecordingShortcut = false
+    }
+}
+
+/// Receives the next key press in the settings window while a shortcut is recorded.
+/// It only sees keys typed into this window while it has focus.
+private struct KeyCapture: NSViewRepresentable {
+    /// Called with the pressed shortcut, or nil when recording was cancelled.
+    let onCapture: (KeyCombo?) -> Void
+
+    func makeNSView(context: Context) -> CaptureView {
+        let view = CaptureView()
+        view.onCapture = onCapture
+        return view
+    }
+
+    func updateNSView(_ view: CaptureView, context: Context) {
+        view.onCapture = onCapture
+    }
+
+    final class CaptureView: NSView {
+        var onCapture: ((KeyCombo?) -> Void)?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.makeFirstResponder(self)
+        }
+
+        override func keyDown(with event: NSEvent) {
+            handle(event)
+        }
+
+        // Shortcuts with Command arrive here first.
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            guard window?.firstResponder === self else { return false }
+            handle(event)
+            return true
+        }
+
+        override func resignFirstResponder() -> Bool {
+            onCapture?(nil)
+            return true
+        }
+
+        private func handle(_ event: NSEvent) {
+            if event.keyCode == 53 { // Escape
+                finish(nil)
+                return
+            }
+            let combo = KeyCombo(event: event)
+            guard combo.hasRequiredModifier else {
+                NSSound.beep()
+                return
+            }
+            finish(combo)
+        }
+
+        private func finish(_ combo: KeyCombo?) {
+            let callback = onCapture
+            onCapture = nil
+            callback?(combo)
+        }
     }
 }
 

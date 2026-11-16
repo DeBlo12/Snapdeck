@@ -240,6 +240,33 @@ final class WindowSetupTests: XCTestCase {
     }
 }
 
+final class KeyComboTests: XCTestCase {
+    func testDisplayOrdersModifiersLikeMacOS() {
+        let all = KeyCombo.command | KeyCombo.shift | KeyCombo.option | KeyCombo.control
+        XCTAssertEqual(KeyCombo(keyCode: 123, modifiers: all, label: "←").display, "⌃⌥⇧⌘←")
+        XCTAssertEqual(KeyCombo(keyCode: 8, modifiers: KeyCombo.control | KeyCombo.option, label: "C").display, "⌃⌥C")
+    }
+
+    func testRequiresARealModifier() {
+        XCTAssertFalse(KeyCombo(keyCode: 0, modifiers: 0, label: "A").hasRequiredModifier)
+        XCTAssertFalse(KeyCombo(keyCode: 0, modifiers: KeyCombo.shift, label: "A").hasRequiredModifier)
+        XCTAssertTrue(KeyCombo(keyCode: 0, modifiers: KeyCombo.command, label: "A").hasRequiredModifier)
+    }
+
+    func testLabels() {
+        XCTAssertEqual(KeyCombo.label(keyCode: 126, characters: "\u{F700}"), "↑")
+        XCTAssertEqual(KeyCombo.label(keyCode: 40, characters: "k"), "K")
+        XCTAssertEqual(KeyCombo.label(keyCode: 96, characters: nil), "F5")
+        XCTAssertEqual(KeyCombo.label(keyCode: 200, characters: ""), "Key 200")
+    }
+
+    func testCodableRoundTrip() throws {
+        let combo = KeyCombo(keyCode: 40, modifiers: KeyCombo.option | KeyCombo.command, label: "K")
+        let data = try JSONEncoder().encode(["left": combo])
+        XCTAssertEqual(try JSONDecoder().decode([String: KeyCombo].self, from: data), ["left": combo])
+    }
+}
+
 final class DisplayKeyTests: XCTestCase {
     let laptop = CGRect(x: 0, y: 0, width: 1728, height: 1117)
     let external = CGRect(x: 1728, y: -200, width: 2560, height: 1440)

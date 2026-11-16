@@ -114,29 +114,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func registerHotkeys() {
         let wm = windowManager
-        let modifiers = settings.modifiers
         var failed: [String] = []
         HotkeyManager.shared.unregisterAll()
+        guard !settings.isRecordingShortcut else { return }
 
-        var bindings: [(String, Int, () -> Void)] = [
-            ("←", kVK_LeftArrow, { wm.snap(.left) }),
-            ("→", kVK_RightArrow, { wm.snap(.right) }),
-            ("↑", kVK_UpArrow, { wm.snap(.up) }),
-            ("↓", kVK_DownArrow, { wm.snap(.down) }),
-            ("↩", kVK_Return, { wm.snapFocused(to: .full) }),
-            ("C", kVK_ANSI_C, { wm.centerFocused() }),
-            ("A", kVK_ANSI_A, { wm.arrangeActiveLayout() }),
+        let handlers: [Settings.ShortcutAction: () -> Void] = [
+            .left: { wm.snap(.left) },
+            .right: { wm.snap(.right) },
+            .up: { wm.snap(.up) },
+            .down: { wm.snap(.down) },
+            .maximise: { wm.snapFocused(to: .full) },
+            .centre: { wm.centerFocused() },
+            .arrange: { wm.arrangeActiveLayout() },
         ]
+        for action in Settings.ShortcutAction.allCases {
+            guard let handler = handlers[action] else { continue }
+            let combo = settings.combo(for: action)
+            if !HotkeyManager.shared.register(keyCode: combo.keyCode, modifiers: combo.modifiers, handler: handler) {
+                failed.append(combo.display)
+            }
+        }
+
         // Digits 1...9 move the focused window into that zone of the active layout.
         let digits = [kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5,
                       kVK_ANSI_6, kVK_ANSI_7, kVK_ANSI_8, kVK_ANSI_9]
-        for (index, key) in digits.enumerated() {
-            bindings.append(("\(index + 1)", key, { wm.moveFocused(toLayoutZone: index) }))
-        }
-
-        for (label, key, action) in bindings
-        where !HotkeyManager.shared.register(keyCode: key, modifiers: modifiers.carbon, handler: action) {
-            failed.append(modifiers.rawValue + label)
+        let modifiers = settings.modifiers
+        for (index, key) in digits.enumerated()
+        where !HotkeyManager.shared.register(keyCode: key, modifiers: modifiers.carbon,
+                                             handler: { wm.moveFocused(toLayoutZone: index) }) {
+            failed.append("\(modifiers.rawValue)\(index + 1)")
         }
         settings.failedHotkeys = failed
     }
@@ -204,18 +210,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Snap
-        func arrow(_ key: Int) -> String { String(Character(UnicodeScalar(key)!)) }
-        menu.addItem(ActionItem("Left", key: arrow(NSLeftArrowFunctionKey), mods: mods,
+        func key(_ action: Settings.ShortcutAction) -> String { settings.combo(for: action).menuKey }
+        func flags(_ action: Settings.ShortcutAction) -> NSEvent.ModifierFlags { settings.combo(for: action).flags }
+        menu.addItem(ActionItem("Left", key: key(.left), mods: flags(.left),
                                 preview: { wm.previewSnap(.left) }) { wm.snap(.left) })
-        menu.addItem(ActionItem("Right", key: arrow(NSRightArrowFunctionKey), mods: mods,
+        menu.addItem(ActionItem("Right", key: key(.right), mods: flags(.right),
                                 preview: { wm.previewSnap(.right) }) { wm.snap(.right) })
-        menu.addItem(ActionItem("Up / Maximise", key: arrow(NSUpArrowFunctionKey), mods: mods,
+        menu.addItem(ActionItem("Up / Maximise", key: key(.up), mods: flags(.up),
                                 preview: { wm.previewSnap(.up) }) { wm.snap(.up) })
-        menu.addItem(ActionItem("Down / Restore", key: arrow(NSDownArrowFunctionKey), mods: mods,
+        menu.addItem(ActionItem("Down / Restore", key: key(.down), mods: flags(.down),
                                 preview: { wm.previewSnap(.down) }) { wm.snap(.down) })
-        menu.addItem(ActionItem("Maximise", key: "\r", mods: mods,
+        menu.addItem(ActionItem("Maximise", key: key(.maximise), mods: flags(.maximise),
                                 preview: { wm.previewSnapFocused(to: .full) }) { wm.snapFocused(to: .full) })
-        menu.addItem(ActionItem("Centre", key: "c", mods: mods,
+        menu.addItem(ActionItem("Centre", key: key(.centre), mods: flags(.centre),
                                 preview: { wm.previewCenter() }) { wm.centerFocused() })
         menu.addItem(.separator())
 
@@ -249,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             zoneItem.submenu = zoneMenu
             menu.addItem(zoneItem)
         }
-        menu.addItem(ActionItem("Arrange Windows in Layout", key: "a", mods: mods,
+        menu.addItem(ActionItem("Arrange Windows in Layout", key: key(.arrange), mods: flags(.arrange),
                                 preview: { wm.previewArrange() }) { wm.arrangeActiveLayout() })
         menu.addItem(.separator())
 

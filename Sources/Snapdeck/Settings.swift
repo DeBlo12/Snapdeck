@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Combine
+import SnapdeckCore
 
 /// User preferences, stored in UserDefaults.
 final class Settings: ObservableObject {
@@ -45,17 +46,36 @@ final class Settings: ObservableObject {
         }
     }
 
-    /// Every shortcut: what it does and the key pressed with the modifiers.
-    static let shortcuts: [(action: String, key: String)] = [
-        ("Left half, or move left", "←"),
-        ("Right half, or move right", "→"),
-        ("Top quarter, or maximise", "↑"),
-        ("Bottom quarter, or restore", "↓"),
-        ("Maximise", "↩"),
-        ("Centre", "C"),
-        ("Move window to layout zone 1–9", "1 … 9"),
-        ("Arrange windows in active layout", "A"),
-    ]
+    /// The actions whose shortcut can be changed individually.
+    enum ShortcutAction: String, CaseIterable, Identifiable {
+        case left, right, up, down, maximise, centre, arrange
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .left: return "Left half, or move left"
+            case .right: return "Right half, or move right"
+            case .up: return "Top quarter, or maximise"
+            case .down: return "Bottom quarter, or restore"
+            case .maximise: return "Maximise"
+            case .centre: return "Centre"
+            case .arrange: return "Arrange windows in active layout"
+            }
+        }
+
+        var defaultKey: (code: Int, label: String) {
+            switch self {
+            case .left: return (kVK_LeftArrow, "←")
+            case .right: return (kVK_RightArrow, "→")
+            case .up: return (kVK_UpArrow, "↑")
+            case .down: return (kVK_DownArrow, "↓")
+            case .maximise: return (kVK_Return, "↩")
+            case .centre: return (kVK_ANSI_C, "C")
+            case .arrange: return (kVK_ANSI_A, "A")
+            }
+        }
+    }
 
     private let defaults = UserDefaults.standard
 
@@ -90,6 +110,25 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// Shortcuts the user changed, by action. Others use the default key and modifiers.
+    @Published var customShortcuts: [String: KeyCombo] {
+        didSet {
+            defaults.set(try? JSONEncoder().encode(customShortcuts), forKey: "customShortcuts")
+            onShortcutsChanged?()
+        }
+    }
+
+    /// While a new shortcut is being recorded the global shortcuts are switched off,
+    /// so that pressing an existing one records it instead of triggering it.
+    @Published var isRecordingShortcut = false {
+        didSet { onShortcutsChanged?() }
+    }
+
+    func combo(for action: ShortcutAction) -> KeyCombo {
+        customShortcuts[action.rawValue]
+            ?? KeyCombo(keyCode: action.defaultKey.code, modifiers: modifiers.carbon, label: action.defaultKey.label)
+    }
+
     /// Shortcuts another app already owns.
     @Published var failedHotkeys: [String] = []
 
@@ -101,6 +140,43 @@ final class Settings: ObservableObject {
         snapGroupsEnabled = defaults.object(forKey: "snapGroupsEnabled") as? Bool ?? true
         displayProfilesEnabled = defaults.bool(forKey: "displayProfilesEnabled")
         gap = defaults.double(forKey: "gap")
+        customShortcuts = defaults.data(forKey: "customShortcuts")
+            .flatMap { try? JSONDecoder().decode([String: KeyCombo].self, from: $0) } ?? [:]
         modifiers = defaults.string(forKey: "modifiers").flatMap(Modifiers.init(rawValue:)) ?? .controlOption
+    }
+}
+
+extension KeyCombo {
+    var flags: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers & KeyCombo.control != 0 { flags.insert(.control) }
+        if modifiers & KeyCombo.option != 0 { flags.insert(.option) }
+        if modifiers & KeyCombo.shift != 0 { flags.insert(.shift) }
+        if modifiers & KeyCombo.command != 0 { flags.insert(.command) }
+        return flags
+    }
+
+    /// Key equivalent for showing the shortcut in a menu; empty when it has none.
+    var menuKey: String {
+        switch keyCode {
+        case kVK_LeftArrow: return String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
+        case kVK_RightArrow: return String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+        case kVK_UpArrow: return String(Character(UnicodeScalar(NSUpArrowFunctionKey)!))
+        case kVK_DownArrow: return String(Character(UnicodeScalar(NSDownArrowFunctionKey)!))
+        case kVK_Return: return "\r"
+        case kVK_Space: return " "
+        default: return label.count == 1 ? label.lowercased() : ""
+        }
+    }
+
+    init(event: NSEvent) {
+        let flags = event.modifierFlags
+        var modifiers = 0
+        if flags.contains(.control) { modifiers |= KeyCombo.control }
+        if flags.contains(.option) { modifiers |= KeyCombo.option }
+        if flags.contains(.shift) { modifiers |= KeyCombo.shift }
+        if flags.contains(.command) { modifiers |= KeyCombo.command }
+        self.init(keyCode: Int(event.keyCode), modifiers: modifiers,
+                  label: KeyCombo.label(keyCode: Int(event.keyCode), characters: event.charactersIgnoringModifiers))
     }
 }
