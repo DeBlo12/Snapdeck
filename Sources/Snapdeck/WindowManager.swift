@@ -9,6 +9,16 @@ final class WindowManager {
     private let settings: Settings
     /// Frames windows had before they were first snapped, for "restore".
     private var restoreFrames: [AXUIElement: CGRect] = [:]
+    /// The zone each window was last put into and the frame it actually took.
+    /// Windows with a minimum or fixed size do not fill their zone, so the zone
+    /// cannot always be worked out from the frame alone.
+    private var placed: [AXUIElement: (zone: Zone, screen: ScreenInfo, frame: CGRect)] = [:]
+
+    /// Set to trace snap decisions (debug builds only, see `--trace` in AppDelegate).
+    var trace: ((String) -> Void)?
+    /// Asked before a restore launches apps: receives their names, returns whether to go ahead.
+    /// Setups are plain files, so the user confirms what a restore is about to open.
+    var confirmLaunch: (([String]) -> Bool)?
 
     /// A resolved action on one window.
     private enum Move {
@@ -65,6 +75,19 @@ final class WindowManager {
             restoreFrames[window] = frame
         }
         window.setFrame(frame(of: zone, on: screen))
+        if placed.count > 200 { placed.removeAll() }
+        placed[window] = window.frame.map { (zone, screen, $0) }
+    }
+
+    /// The zone a window is in: the one we put it into if it has not moved since,
+    /// otherwise whatever its frame corresponds to.
+    private func currentZone(of window: AXUIElement, frame: CGRect, screen: ScreenInfo) -> Zone {
+        if let last = placed[window], last.screen == screen,
+           abs(last.frame.minX - frame.minX) < 3, abs(last.frame.minY - frame.minY) < 3,
+           abs(last.frame.width - frame.width) < 3, abs(last.frame.height - frame.height) < 3 {
+            return last.zone
+        }
+        return Zone(frame: frame, in: screen.visible, gap: CGFloat(settings.gap))
     }
 
     private func perform(_ move: Move?) {
@@ -73,6 +96,7 @@ final class WindowManager {
             place(window, in: zone, on: screen)
         case .restore(let window, let frame):
             restoreFrames[window] = nil
+            placed[window] = nil
             window.setFrame(frame)
         case .setFrame(let window, let frame):
             window.setFrame(frame)
@@ -99,7 +123,8 @@ final class WindowManager {
 
     private func move(for direction: Direction) -> Move? {
         guard let (window, frame, screen) = focused() else { return nil }
-        let current = Zone(frame: frame, in: screen.visible, gap: CGFloat(settings.gap))
+        let current = currentZone(of: window, frame: frame, screen: screen)
+        trace?("\(direction): frame=\(frame) visible=\(screen.visible) current=\(current) -> \(nextZone(direction: direction, current: current))")
 
         switch nextZone(direction: direction, current: current) {
         case .restore:
@@ -231,7 +256,7 @@ final class WindowManager {
         let screens = Accessibility.screens()
         guard !screens.isEmpty else { return [] }
         return setup.windows.map { entry in
-            let screen = screens[min(entry.screen, screens.count - 1)]
+            let screen = screens[max(0, min(entry.screen, screens.count - 1))]
             let running = NSRunningApplication.runningApplications(withBundleIdentifier: entry.bundleID).first
             let name = running?.localizedName
                 ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: entry.bundleID)?
@@ -247,6 +272,16 @@ final class WindowManager {
         let screens = Accessibility.screens()
         guard !screens.isEmpty else { return }
         var launched = false
+        var launchMissing = launchMissing
+
+        if launchMissing {
+            let missing = Set(setup.windows.map(\.bundleID))
+                .filter { NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty }
+                .compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+                .map { $0.deletingPathExtension().lastPathComponent }
+                .sorted()
+            if !missing.isEmpty { launchMissing = confirmLaunch?(missing) ?? false }
+        }
 
         for (bundleID, entries) in Dictionary(grouping: setup.windows, by: \.bundleID) {
             let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
@@ -258,10 +293,11 @@ final class WindowManager {
                 continue
             }
             let live = Accessibility.windows(pid: app.processIdentifier)
-            let pairs = matchWindows(savedTitles: entries.map(\.title), liveTitles: live.map(\.title))
+            let pairs = matchWindows(savedTitles: entries.map(\.titleHash),
+                                     liveTitles: live.map { WindowSetup.hash($0.title) })
             for (entry, liveIndex) in zip(entries, pairs) {
                 guard let liveIndex else { continue }
-                let screen = screens[min(entry.screen, screens.count - 1)]
+                let screen = screens[max(0, min(entry.screen, screens.count - 1))]
                 live[liveIndex].setFrame(entry.zone.frame(in: screen.visible))
             }
         }

@@ -126,6 +126,31 @@ final class EdgeZoneTests: XCTestCase {
     }
 }
 
+final class WindowSetupTests: XCTestCase {
+    func testTitleIsStoredOnlyAsHash() throws {
+        let entry = WindowSetup.Entry(bundleID: "com.example.app", title: "Secret plan.txt", screen: 0, zone: .leftHalf)
+        let json = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
+        XCTAssertFalse(json.contains("Secret"))
+        XCTAssertEqual(entry.titleHash, WindowSetup.hash("Secret plan.txt"))
+        XCTAssertEqual(entry.titleHash.count, 64)
+        XCTAssertEqual(WindowSetup.hash(""), "")
+    }
+
+    func testOldFilesWithPlainTitlesAreMigrated() throws {
+        let old = #"{"bundleID":"com.example.app","title":"Inbox","screen":0,"zone":{"x":0,"y":0,"width":0.5,"height":1}}"#
+        let entry = try JSONDecoder().decode(WindowSetup.Entry.self, from: Data(old.utf8))
+        XCTAssertEqual(entry.titleHash, WindowSetup.hash("Inbox"))
+    }
+
+    func testInsaneEntriesAreDetected() {
+        XCTAssertTrue(WindowSetup.Entry(bundleID: "a.b", title: "", screen: 1, zone: .full).isSane)
+        XCTAssertFalse(WindowSetup.Entry(bundleID: "a.b", title: "", screen: -1, zone: .full).isSane)
+        XCTAssertFalse(WindowSetup.Entry(bundleID: "a.b", title: "", screen: 0,
+                                         zone: Zone(x: 0, y: 0, width: .infinity, height: 1)).isSane)
+        XCTAssertFalse(WindowSetup.Entry(bundleID: "", title: "", screen: 0, zone: .full).isSane)
+    }
+}
+
 final class MatchWindowsTests: XCTestCase {
     func testExactTitlesWinOverOrder() {
         XCTAssertEqual(matchWindows(savedTitles: ["Inbox", "Notes"], liveTitles: ["Notes", "Inbox"]), [1, 0])

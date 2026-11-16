@@ -32,10 +32,15 @@ final class Store: ObservableObject {
     func load() {
         loadError = nil
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Only the user may read the config: setups list which apps are in use.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
 
         // layouts.json is meant to be edited by hand; seed it with the built-ins.
         if !FileManager.default.fileExists(atPath: layoutsURL.path) {
             write(Layout.builtIn, to: layoutsURL)
+        }
+        for url in [layoutsURL, setupsURL] where FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         }
         do {
             let loaded = try JSONDecoder().decode([Layout].self, from: Data(contentsOf: layoutsURL))
@@ -51,7 +56,10 @@ final class Store: ObservableObject {
 
         if FileManager.default.fileExists(atPath: setupsURL.path) {
             do {
-                setups = try JSONDecoder().decode([WindowSetup].self, from: Data(contentsOf: setupsURL))
+                let loaded = try JSONDecoder().decode([WindowSetup].self, from: Data(contentsOf: setupsURL))
+                setups = loaded.map { WindowSetup(name: $0.name, windows: $0.windows.filter(\.isSane)) }
+                // Rewrite so that files from early versions lose their plain window titles.
+                write(setups, to: setupsURL)
             } catch {
                 setups = []
                 loadError = "setups.json could not be read"
@@ -76,5 +84,6 @@ final class Store: ObservableObject {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(value) else { return }
         try? data.write(to: url, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }

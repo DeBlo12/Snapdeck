@@ -97,6 +97,24 @@ Press *Reload* in the settings after editing. `setups.json` is written by
 - Only the modifier keys of the shortcuts can be changed, not the individual keys,
   and there is no visual layout editor.
 
+## Security
+
+Snapdeck needs the Accessibility permission, so it is built to give other software
+as little to hold on to as possible:
+
+- No network access, no update mechanism, no telemetry, no third-party code.
+- No URL scheme, scripting interface or other way for other programs to send it commands.
+- It registers its own shortcuts and watches mouse button and drag events only.
+  It never reads keystrokes or the contents of windows.
+- The app is signed with the hardened runtime, which stops other programs from
+  injecting code into it to borrow its Accessibility permission.
+- Saved setups store a SHA-256 hash of each window title, not the title, and the
+  config files are readable by your user only.
+- Restoring a setup asks before it opens apps that are not running.
+
+Prebuilt binaries are not notarised by Apple. Build from source if you want to be
+sure what you are granting Accessibility access to.
+
 ## Project structure
 
 - `Sources/SnapdeckCore`: pure geometry and models, covered by unit tests.

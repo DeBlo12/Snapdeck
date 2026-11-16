@@ -30,6 +30,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         dragSnap.start()
 
         if CommandLine.arguments.contains("--settings") { showSettings() }
+        windowManager.confirmLaunch = { names in
+            let alert = NSAlert()
+            alert.messageText = "Open \(names.count == 1 ? "this app" : "these apps")?"
+            alert.informativeText = "The setup includes apps that are not running:\n" + names.joined(separator: "\n")
+            alert.addButton(withTitle: "Open")
+            alert.addButton(withTitle: "Skip")
+            NSApp.activate(ignoringOtherApps: true)
+            return alert.runModal() == .alertFirstButtonReturn
+        }
+
+        #if DEBUG
+        if let index = CommandLine.arguments.firstIndex(of: "--trace"),
+           CommandLine.arguments.indices.contains(index + 1) {
+            runTrace(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+        }
+        #endif
     }
 
     /// Opening the app again while it is running (Finder, Spotlight) shows the settings.
@@ -37,6 +53,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         showSettings()
         return false
     }
+
+    // MARK: Diagnostics (debug builds only)
+
+    #if DEBUG
+    /// `--trace <file>`: snaps the focused window left, up, right, down, writes what
+    /// happened to the file, then puts the window back. For debugging on real windows.
+    private func runTrace(to url: URL) {
+        var lines: [String] = []
+        func log(_ line: String) {
+            lines.append(line)
+            try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        }
+        let wm = windowManager
+        wm.trace = log
+        log("trusted=\(Accessibility.isTrusted) screens=\(Accessibility.screens())")
+
+        var original: (AXUIElement, CGRect)?
+        let steps: [Direction] = [.left, .up, .right, .down, .down]
+        for (index, direction) in steps.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1 + Double(index) * 0.7) {
+                if index == 0, let window = Accessibility.focusedWindow(), let frame = window.frame {
+                    original = (window, frame)
+                    log("app=\(NSWorkspace.shared.frontmostApplication?.localizedName ?? "?") start=\(frame)")
+                }
+                wm.snap(direction)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    log("  after \(direction): \(String(describing: original?.0.frame))")
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1 + Double(steps.count) * 0.7 + 0.5) {
+            if let (window, frame) = original { window.setFrame(frame) }
+            let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+            let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+            for entry in info where (entry[kCGWindowLayer as String] as? Int) == 0 {
+                let bounds = (entry[kCGWindowBounds as String] as? NSDictionary).flatMap { CGRect(dictionaryRepresentation: $0) }
+                log("z: \(entry[kCGWindowOwnerName as String] ?? "?") \(String(describing: bounds))")
+            }
+            log("done")
+            wm.trace = nil
+        }
+    }
+    #endif
 
     // MARK: Hotkeys
 

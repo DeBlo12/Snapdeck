@@ -13,6 +13,8 @@ cp Support/Info.plist "$APP/Contents/Info.plist"
 # Ad-hoc signing by default. Set CODESIGN_IDENTITY to a certificate from
 # `security find-identity -v -p codesigning` so that macOS keeps the
 # Accessibility permission across rebuilds.
-codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP"
+# The hardened runtime stops other programs from injecting code into Snapdeck
+# and so borrowing its Accessibility permission.
+codesign --force --options runtime --sign "${CODESIGN_IDENTITY:--}" "$APP"
 
 echo "Built $APP"
